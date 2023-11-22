@@ -12,19 +12,19 @@ mod mqtt;
 use cyw43_pio::PioSpi;
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_net::tcp::{TcpSocket};
-use embassy_net::{Config, IpAddress, IpEndpoint, Stack, StackResources};
+use embassy_net::{Config, Stack, StackResources};
 use embassy_rp::bind_interrupts;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
 use embassy_rp::pio::{InterruptHandler, Pio};
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::channel::{Channel, Receiver};
 use embassy_time::{Duration, Timer};
-use embassy_futures::select::select;
+use mqttrs::{Publish, QosPid};
+
 use static_cell::make_static;
-use mqttrs::*;
 
 use {defmt_rtt as _, panic_probe as _};
-use crate::mqtt::{MqttReader, MqttWriter};
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
@@ -32,10 +32,6 @@ bind_interrupts!(struct Irqs {
 
 const WIFI_NETWORK: &str = "Things";
 const WIFI_PASSWORD: &str = "raclette";
-const IP_BROKER: IpAddress = IpAddress::v4(192, 168, 1, 199);
-const PORT_BROKER: u16 = 1883;
-const USERNAME: &str = "plant";
-const PASSWORD: &[u8] = b"plant";
 
 
 #[embassy_executor::task]
@@ -117,141 +113,35 @@ async fn main(spawner: Spawner) {
     }
     info!("DHCP is now up!");
 
-    // And now we can use it!
-    let broker = IpEndpoint::new(IP_BROKER, PORT_BROKER);
+    let channel = make_static!(Channel::<NoopRawMutex, Publish, 5>::new());
+    let sender = channel.sender();
 
-    let mut rx_buffer = [0; 4096];
-    let mut tx_buffer = [0; 4096];
-
-    let mut buf = [0; 4096];
+    unwrap!(spawner.spawn(mqtt_task(stack, channel.receiver())));
 
     loop {
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(Duration::from_secs(10)));
+        let payload = b"Payload";
 
-        control.gpio_set(0, false).await;
-        info!("Connecting on {}:{}...", IP_BROKER, PORT_BROKER);
+        let _ = sender.try_send(Publish {
+            dup: false,
+            payload,
+            qospid: QosPid::AtMostOnce,
+            retain: true,
+            topic_name: "plop/temperature"
+        });
 
-        if let Err(e) = socket.connect(broker).await {
-            warn!("accept error: {:?}", e);
-            continue;
-        }
+        let _ = sender.try_send(Publish {
+            dup: false,
+            payload: b"42%",
+            qospid: QosPid::AtMostOnce,
+            retain: true,
+            topic_name: "plop/plant1/humidity"
+        });
 
-        info!("Connected to {:?}", socket.remote_endpoint());
-        control.gpio_set(0, true).await;
-
-        let (mut socketr, mut socketw) = socket.split();
-
-        // Encode an MQTT Connect packet.
-        match socketw.write_packet(Connect {
-            protocol: Protocol::MQTT311,
-            keep_alive: 30,
-            client_id: "doc_client".into(),
-            clean_session: true,
-            last_will: None,
-            username: Some(USERNAME),
-            password: Some(PASSWORD)
-        }.into()).await {
-            Ok(()) => {},
-            Err(_e) => {
-                continue;
-            }
-        }
-
-        match socketr.read_packet(&mut buf).await {
-            Ok(pkt) if pkt.get_type() == PacketType::Connack => {},
-            Ok(_pkt) => {
-                warn!("no Connack");
-                continue;
-            }
-            Err(e) => {
-                warn!("read error: {:?}", e);
-                continue;
-            }
-        };
-
-        let reader = async {
-
-            loop {
-                let pkt = match socketr.read_packet(&mut buf).await {
-                    Ok(pkt) => pkt,
-                    Err(e) => {
-                        warn!("read error: {:?}", e);
-                        break;
-                    }
-                };
-
-                info!("decoded {}", pkt.get_type() == PacketType::Connack);
-            }
-        };
-
-        let puplisher = async {
-            loop {
-                //info!("sending");
-                let payload = b"Payload";
-
-                match socketw.write_packet(Publish {
-                    dup: false,
-                    payload,
-                    qospid: QosPid::AtMostOnce,
-                    retain: true,
-                    topic_name: "plop/2"
-                }.into()).await{
-                    Ok(()) => {},
-                    Err(_e) => {
-                        break;
-                    }
-                }
-
-                Timer::after(Duration::from_millis(1_000)).await;
-            }
-        };
-
-        //unwrap!(spawner.spawn(reader_task(socketr)));
-
-        // If one the the loop break, we have a connection problem
-        select(
-            puplisher,
-            reader,
-        ).await;
-
+        Timer::after(Duration::from_millis(1_000)).await;
     }
-
-    //unwrap!(spawner.spawn(reader_task(socketr)));
 }
 
-// #[embassy_executor::task]
-// async fn reader_task(mut socketr: TcpReader<'static>) {
-//     let mut buf = [0; 4096];
-//     loop {
-//         let n = match socketr.read(&mut buf).await {
-//             Ok(0) => {
-//                 warn!("read EOF");
-//                 break;
-//             }
-//             Ok(n) => n,
-//             Err(e) => {
-//                 warn!("read error: {:?}", e);
-//                 break;
-//             }
-//         };
-//
-//         info!("rxd {}", from_utf8(&buf[..n]).unwrap());
-//
-//         // Decode one packet. The buffer will advance to the next packet.
-//         let rpkt = match decode_slice(&buf[..n]) {
-//             Ok(Some(pkt)) => pkt,
-//             Ok(None) => {
-//                 warn!("no packet");
-//                 break;
-//             },
-//             Err(_e) => {
-//                 warn!("decode error");
-//                 break;
-//             }
-//         };
-//
-//         info!("decoded {}", rpkt.get_type() == PacketType::Connack);
-//     }
-// }
-//
+#[embassy_executor::task]
+async fn mqtt_task(stack: &'static Stack<cyw43::NetDriver<'static>>, receiver: Receiver<'static, NoopRawMutex, Publish<'static>, 5>) {
+    mqtt::run(stack, receiver).await
+}
