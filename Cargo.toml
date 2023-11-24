@@ -34,6 +34,7 @@ futures = { version = "0.3.17", default-features = false, features = ["async-awa
 
 #byte-slice-cast = { version = "1.2.0", default-features = false }
 #heapless = "0.8"
+ryu = "1.0"
 
 #embedded-hal-1 = { package = "embedded-hal", version = "=1.0.0-rc.1" }
 #embedded-hal-async = "1.0.0-rc.1"
@@ -47,6 +48,7 @@ portable-atomic = { version = "1.5", features = ["critical-section"] }
 #pio = "0.2.1"
 #rand = { version = "0.8.5", default-features = false }
 mqttrs = { version = "0.4.1", default-features = false  }
+
 
 [profile.release]
 debug = 2

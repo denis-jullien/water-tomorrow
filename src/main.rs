@@ -7,18 +7,18 @@
 #![feature(async_fn_in_trait)]
 #![allow(stable_features, unknown_lints, async_fn_in_trait)]
 
+
 mod mqtt;
 
 use cyw43_pio::PioSpi;
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_net::{Config, Stack, StackResources};
+use embassy_net::{Config, IpEndpoint, Stack, StackResources, IpAddress};
+use embassy_net::tcp::TcpSocket;
 use embassy_rp::bind_interrupts;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
 use embassy_rp::pio::{InterruptHandler, Pio};
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::channel::{Channel, Receiver};
 use embassy_time::{Duration, Timer};
 use mqttrs::{Publish, QosPid};
 
@@ -32,7 +32,10 @@ bind_interrupts!(struct Irqs {
 
 const WIFI_NETWORK: &str = "Things";
 const WIFI_PASSWORD: &str = "raclette";
-
+const IP_BROKER: IpAddress = IpAddress::v4(192, 168, 1, 199);
+const PORT_BROKER: u16 = 1883;
+const USERNAME: &str = "plant";
+const PASSWORD: &[u8] = b"plant";
 
 #[embassy_executor::task]
 async fn wifi_task(
@@ -113,35 +116,50 @@ async fn main(spawner: Spawner) {
     }
     info!("DHCP is now up!");
 
-    let channel = make_static!(Channel::<NoopRawMutex, Publish, 5>::new());
-    let sender = channel.sender();
+    let mut rx_buffer = [0; 4096];
+    let mut tx_buffer = [0; 4096];
 
-    unwrap!(spawner.spawn(mqtt_task(stack, channel.receiver())));
+    let socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+    let broker = IpEndpoint::new(IP_BROKER, PORT_BROKER);
+
+    let mut mqtt = mqtt::MqttDriver::new(socket, broker, Some(USERNAME), Some(PASSWORD));
+
+    info!("Connection !");
+
+    let mut temperature:f32 = 1.2;
 
     loop {
-        let payload = b"Payload";
+        let _ = mqtt.manage_connection().await;
 
-        let _ = sender.try_send(Publish {
-            dup: false,
-            payload,
-            qospid: QosPid::AtMostOnce,
-            retain: true,
-            topic_name: "plop/temperature"
-        });
+        let mut buffer = ryu::Buffer::new();
+        temperature += 0.1;
 
-        let _ = sender.try_send(Publish {
+        info!("loop {}", temperature);
+
+        let _ = mqtt.publish(Publish {
             dup: false,
-            payload: b"42%",
+            payload: buffer.format(temperature).as_bytes(),
             qospid: QosPid::AtMostOnce,
-            retain: true,
-            topic_name: "plop/plant1/humidity"
-        });
+            retain: false,
+            topic_name: "indoor_plants/wc/plant1/temperature"
+        }).await;
+
+        let _ = mqtt.publish(Publish {
+            dup: false,
+            payload: buffer.format(42.0).as_bytes(),
+            qospid: QosPid::AtMostOnce,
+            retain: false,
+            topic_name: "indoor_plants/wc/plant1/humidity"
+        }).await;
+
+        let _ = mqtt.publish(Publish {
+            dup: false,
+            payload: buffer.format(69.0).as_bytes(),
+            qospid: QosPid::AtMostOnce,
+            retain: false,
+            topic_name: "indoor_plants/wc/relative_humidity"
+        }).await;
 
         Timer::after(Duration::from_millis(1_000)).await;
     }
-}
-
-#[embassy_executor::task]
-async fn mqtt_task(stack: &'static Stack<cyw43::NetDriver<'static>>, receiver: Receiver<'static, NoopRawMutex, Publish<'static>, 5>) {
-    mqtt::run(stack, receiver).await
 }
