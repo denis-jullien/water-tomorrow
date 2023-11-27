@@ -128,7 +128,7 @@ impl<'a> MqttDriver<'a> {
             match self.socket.write_packet(Connect {
                 protocol: Protocol::MQTT311,
                 keep_alive: 30,
-                client_id: "doc_client".into(),
+                client_id: "plants_wc".into(),
                 clean_session: true,
                 last_will: None,
                 username:self.username,
