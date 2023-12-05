@@ -1,8 +1,15 @@
-[target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = "probe-rs run --chip RP2040"
+[target.xtensa-esp32-none-elf]
+runner = "espflash flash --monitor"
+
 
 [build]
-target = "thumbv6m-none-eabi"        # Cortex-M0 and Cortex-M0+
+rustflags = [
+  "-C", "link-arg=-Tlinkall.x",
+  "-C", "link-arg=-Trom_functions.x",
+#  "-C", "link-arg=-nostartfiles",
+]
 
-[env]
-DEFMT_LOG = "debug"
+target = "xtensa-esp32-none-elf"
+
+[unstable]
+build-std = ["core"]

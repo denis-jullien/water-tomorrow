@@ -1,3 +1,9 @@
-# water-tomorrow
+## Getting Started
 
-this project aims at keeping my indoor plants alive
+### Installing the Rust Compiler
+
+```shell
+cargo install espup
+espup install
+cargo install espflash
+```

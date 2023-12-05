@@ -1,55 +1,28 @@
 [package]
-name = "water-tomorrow"
+name = "water-tomorrow-esp32"
 version = "0.1.0"
+authors = ["Denis <denisjullien@neocean.com>"]
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT OR Apache-2.0"
 
 [dependencies]
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", version = "0.1.0", features = ["defmt"] }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", version = "0.4.0", features = ["defmt"] }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", version = "0.3.3", features = ["nightly", "arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
-embassy-time = { git = "https://github.com/embassy-rs/embassy.git", version = "0.1.5", features = ["nightly", "unstable-traits", "defmt", "defmt-timestamp-uptime"] }
-embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", version = "0.1.0", features = ["defmt", "unstable-traits", "nightly", "unstable-pac", "time-driver", "critical-section-impl"] }
-embassy-net = { git = "https://github.com/embassy-rs/embassy.git", version = "0.2.0", features = ["defmt", "nightly", "tcp", "udp", "dhcpv4", "medium-ethernet"] }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", version = "0.1.0"}
-cyw43 = { git = "https://github.com/embassy-rs/embassy.git", features = ["defmt", "firmware-logs"] }
-cyw43-pio = {  git = "https://github.com/embassy-rs/embassy.git", features = ["defmt", "overclock"] }
+esp32-hal   = { version = "0.16.0", features = ["xtal-40mhz", "embassy", "embassy-time-timg0", "async", "embassy-executor-thread"] }
+esp-backtrace = { version = "0.9.0", features = ["esp32", "panic-handler", "exception-handler", "print-uart"] }
+esp-println = { version = "0.7.0", features = ["esp32"] }
+esp-wifi = {version = "0.1", features = ["esp32", "wifi", "async", "embassy-net"]}
+esp-wifi-sys = { version = "0.1.0" }
 
-defmt = "0.3"
-defmt-rtt = "0.4"
-fixed = "1.23.1"
-fixed-macro = "1.2"
+embedded-svc = { version = "0.26.1", default-features = false, features = [] }
+static_cell = { version = "=1.2", features = ["nightly"] }
 
-#cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
-cortex-m = { version = "0.7.6", features = ["inline-asm"] }
-cortex-m-rt = "0.7.0"
-panic-probe = { version = "0.3", features = ["print-defmt"] }
-futures = { version = "0.3.17", default-features = false, features = ["async-await", "cfg-target-has-atomic", "unstable"] }
+embassy-sync = { version = "0.5.0" }
+embassy-futures = { version = "0.1.0" }
+embassy-net = { version = "0.2.1", features = ["nightly", "tcp", "udp", "dhcpv4", "medium-ethernet"] }
+embassy-time = { version = "0.1.5", features = ["nightly"] }
+embassy-executor = { version = "=0.3.2", features = ["nightly", "executor-thread", "integrated-timers"] } # temporarily pin because we aren't ready for portable-atomic yet
 
-#display-interface-spi = "0.4.1"
-embedded-graphics = "0.8.1"
-epd-waveshare = { git = "https://github.com/caemor/epd-waveshare.git", rev = "cff9130" }
-#display-interface = "0.4.1"
-u8g2-fonts = "0.4.0"
+embedded-hal-async = { version = "1.0.0-rc.1" }
+embedded-io-async = { version = "0.6.0" }
 
-#byte-slice-cast = { version = "1.2.0", default-features = false }
-#heapless = "0.8"
-ryu = "1.0"
-
-embedded-hal = { version = "1.0.0-rc.1" }
-#embedded-hal-async = "1.0.0-rc.1"
-#embedded-hal-bus = { version = "0.1.0-rc.1", features = ["async"] }
-embedded-io-async = { version = "0.6.0", features = ["defmt-03"] }
-#embedded-storage = { version = "0.3" }
-static_cell = { version = "2", features = ["nightly"]}
-portable-atomic = { version = "1.5", features = ["critical-section"] }
-#log = "0.4"
-#pio-proc = "0.2"
-#pio = "0.2.1"
-#rand = { version = "0.8.5", default-features = false }
-mqttrs = { version = "0.4.1", default-features = false  }
-
-
-[profile.release]
-debug = 2
+[profile.dev.package.esp-wifi]
+opt-level = 3
